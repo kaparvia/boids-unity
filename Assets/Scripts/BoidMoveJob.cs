@@ -4,7 +4,7 @@ using Unity.Collections;
 using Unity.Burst;
 
 [BurstCompile]
-public struct CalculateBoidMoveJob : IJobParallelFor
+public struct BoidMoveJob : IJobParallelFor
 {
     private const int MAX_NEIGHBORS = 50;
 
@@ -12,16 +12,19 @@ public struct CalculateBoidMoveJob : IJobParallelFor
     [ReadOnly] public NativeArray<Vector3> boidPositionArray;
     [ReadOnly] public NativeArray<Vector3> boidDirectionArray;
     [ReadOnly] public NativeArray<float> boidSpeedArray;
+    [ReadOnly] public NativeArray<Vector3> predatorPositionArray;
 
     // Boid algorithm parameters
     [ReadOnly] public float cohesionDistanceSqr;
     [ReadOnly] public float avoidanceDistanceSqr;
     [ReadOnly] public float alignmentDistanceSqr;
+    [ReadOnly] public float predatorAvoidanceDistanceSqr;
 
     [ReadOnly] public float cohesionWeight;
     [ReadOnly] public float avoidanceWeight;
     [ReadOnly] public float alignmentWeight;
     [ReadOnly] public float boundsWeight;
+    [ReadOnly] public float predatorAvoidanceWeight;
 
     // Flock geometry
     [ReadOnly] public float domainRadius;
@@ -33,16 +36,18 @@ public struct CalculateBoidMoveJob : IJobParallelFor
 
     public void Execute(int currentBoidIndex)
     {
-        var neighbors = calculateNeighbors(currentBoidIndex);
+        var neighbors = findNeighbors(currentBoidIndex);
+        var predators = findPredators(currentBoidIndex);
 
         Vector3 cohesionVector = calculateCohesion(currentBoidIndex, neighbors.cohesion) * cohesionWeight;
         Vector3 avoidanceVector = calculateAvoidance(currentBoidIndex, neighbors.avoidance) * avoidanceWeight;
         Vector3 alignmentVector = calculateAlignment(currentBoidIndex, neighbors.alignment) * alignmentWeight;
+        Vector3 fleeVector = calculatePredatorAvoidance(currentBoidIndex, predators) * predatorAvoidanceWeight;
         Vector3 boundsVector = calculateBounds(currentBoidIndex) * boundsWeight;
 
         float newSpeed = calculateSpeedForBoid(currentBoidIndex, neighbors.cohesion);
 
-        resultDirections[currentBoidIndex] = cohesionVector + avoidanceVector + alignmentVector + boundsVector;
+        resultDirections[currentBoidIndex] = cohesionVector + avoidanceVector + alignmentVector + boundsVector + fleeVector;
         resultSpeeds[currentBoidIndex] = newSpeed;
     }
 
@@ -136,8 +141,25 @@ public struct CalculateBoidMoveJob : IJobParallelFor
         return boundsVector;
     }
 
+    private Vector3 calculatePredatorAvoidance(int currentBoidIndex, NativeList<int> predatorIndexes)
+    {
+        if (predatorIndexes.Length == 0) return Vector3.zero;
 
-    private (NativeList<int> cohesion, NativeList<int> avoidance, NativeList<int> alignment) calculateNeighbors(int boidIndex)
+        Vector3 avoidanceVector = Vector3.zero;
+
+        // Sum up vectors pointing from boid to neighbors
+        foreach (int predatorIndex in predatorIndexes)
+        {
+            avoidanceVector += boidPositionArray[currentBoidIndex] - boidPositionArray[predatorIndex];
+        }
+
+        // Average
+        avoidanceVector /= predatorIndexes.Length;
+
+        // Normalize
+        return avoidanceVector.normalized;
+    }
+    private (NativeList<int> cohesion, NativeList<int> avoidance, NativeList<int> alignment) findNeighbors(int boidIndex)
     {
         NativeList<int> cohesionNeighbors = new NativeList<int>(MAX_NEIGHBORS, Allocator.Temp);
         NativeList<int> avoidanceNeighbors = new NativeList<int>(MAX_NEIGHBORS, Allocator.Temp);
@@ -157,4 +179,19 @@ public struct CalculateBoidMoveJob : IJobParallelFor
 
         return (cohesionNeighbors, avoidanceNeighbors, alignmentNeighbors);
     }
+
+    private NativeList<int> findPredators(int boidIndex)
+    {
+        NativeList<int> predators = new NativeList<int>(predatorPositionArray.Length, Allocator.Temp);
+
+        for (int i = 0; i < predatorPositionArray.Length; i++)
+        {
+            float distanceSqr = Vector3.SqrMagnitude(predatorPositionArray[i] - boidPositionArray[boidIndex]);
+
+            if (distanceSqr < predatorAvoidanceDistanceSqr) predators.Add(i);
+        }
+
+        return predators;
+    }
+
 }

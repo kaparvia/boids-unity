@@ -8,9 +8,10 @@ public class Flock : MonoBehaviour
 {
     private const float COLOR_VARIATION = 0.15f;
 
+    private List<Material> materials = new();
+
     [Header("Flock Setup")]
 
-    [SerializeField] public bool useJobs;
     [SerializeField] private Boid boidPrefab;
     [SerializeField] private Boid predatorPrefab;
 
@@ -18,7 +19,7 @@ public class Flock : MonoBehaviour
     [SerializeField] public float domainRadius;
 
     [Range(1, 10000)]
-    [SerializeField] private int numberOfBoids = 100;
+    [SerializeField] private int numberOfBoids;
 
     [Range(0.1f, 10f)]
     [SerializeField] public float minSpeed;
@@ -43,11 +44,9 @@ public class Flock : MonoBehaviour
     [Range(0.1f, 20f)]
     [SerializeField] public float huntWeight;
 
-    [Range(0.1f, 20f)]
-    [SerializeField] public float terminalHuntDistance;
+    [Range(0.05f, 1f)]
+    [SerializeField] public float killDistance;
 
-    [Range(0.1f, 20f)]
-    [SerializeField] public float terminalHuntWeight;
 
     [Header("Detection Distances")]
     [Range(0.1f, 20f)]
@@ -79,11 +78,13 @@ public class Flock : MonoBehaviour
     [Range(0f, 10f)]
     [SerializeField] public float predatorAvoidanceWeight;
 
-    public List<Boid> boids;
     public List<Predator> predators;
+    public List<Boid> boids;
 
-    private List<Material> materials = new();
 
+    /*************************************************************************
+     * UNITY METHODS
+     ************************************************************************/
     void Start()
     {
         boids = new List<Boid>();
@@ -111,18 +112,13 @@ public class Flock : MonoBehaviour
      */
     void Update()
     {
-        if (useJobs)
+        // Predators don't use Jobs system, there's only few of them
+        foreach (Predator predator in predators)
         {
-            updateWithJobs();
-        } 
-        else
-        {
-            foreach (Boid boid in boids)
-            {
-                boid.CalculateMove();
-            }
+            predator.CalculateMove();
         }
 
+        calculateBoidMoves();
     }
 
     /*
@@ -135,12 +131,22 @@ public class Flock : MonoBehaviour
             boid.Move();
         }
 
-        //foreach (Boid boid in predatorBoids)
-        //{
-        //    boid.Move();
-        //}
+        foreach (Boid predator in predators)
+        {
+            predator.Move();
+        }
     }
 
+    public void Kill(Boid boid)
+    {
+        boids.Remove(boid);
+        Debug.Log("Killed boid " + boid.name);
+        Destroy(boid.gameObject);
+    }
+
+    /*************************************************************************
+     * CREATE BOIDS
+     ************************************************************************/
     private Boid createBoid(string name, bool isPredator)
     {
         Boid newBoid = Instantiate(
@@ -162,10 +168,13 @@ public class Flock : MonoBehaviour
             newBoid.speed = UnityEngine.Random.Range(minSpeed, maxSpeed);
         }
 
-        // Randomize material
-        Material material = materials[UnityEngine.Random.Range(0, materials.Count - 1)];
-        MeshRenderer renderer = newBoid.gameObject.GetComponentInChildren<MeshRenderer>();
-        renderer.material = material;
+        // Randomize material for boids
+        if (!isPredator)
+        {
+            Material material = materials[UnityEngine.Random.Range(0, materials.Count - 1)];
+            MeshRenderer renderer = newBoid.gameObject.GetComponentInChildren<MeshRenderer>();
+            renderer.material = material;
+        }
 
         return newBoid;
     }
@@ -185,12 +194,16 @@ public class Flock : MonoBehaviour
         }
     }
 
+    /*************************************************************************
+     * UPDATE BOIDS
+     ************************************************************************/
 
-    private void updateWithJobs()
+    private void calculateBoidMoves()
     {
         NativeArray<Vector3> boidPositionArray = new NativeArray<Vector3>(boids.Count, Allocator.TempJob);
         NativeArray<Vector3> boidDirectionArray = new NativeArray<Vector3>(boids.Count, Allocator.TempJob);
         NativeArray<float> boidSpeedArray = new NativeArray<float>(boids.Count, Allocator.TempJob);
+        NativeArray<Vector3> predatorPositionArray = new NativeArray<Vector3>(predators.Count, Allocator.TempJob);
 
         NativeArray<Vector3> resultDirections = new NativeArray<Vector3>(boids.Count, Allocator.TempJob);
         NativeArray<float> resultSpeeds = new NativeArray<float>(boids.Count, Allocator.TempJob);
@@ -203,21 +216,30 @@ public class Flock : MonoBehaviour
             boidSpeedArray[i] = boids[i].speed;
         }
 
+        for (int i = 0; i < predators.Count; i++)
+        {
+            predatorPositionArray[i] = predators[i].transform.position;
+        }
+
         // Initialize job
-        CalculateBoidMoveJob job = new CalculateBoidMoveJob
+        BoidMoveJob job = new BoidMoveJob
         {
             boidPositionArray = boidPositionArray,
             boidDirectionArray = boidDirectionArray,
             boidSpeedArray = boidSpeedArray,
+            predatorPositionArray = predatorPositionArray,
 
             cohesionDistanceSqr = cohesionDistance * cohesionDistance,
             avoidanceDistanceSqr = avoidanceDistance * avoidanceDistance,
             alignmentDistanceSqr = alignmentDistance * alignmentDistance,
+            predatorAvoidanceDistanceSqr = predatorAvoidanceDistance * predatorAvoidanceDistance,
 
             cohesionWeight = cohesionWeight,
             avoidanceWeight = avoidanceWeight,
             alignmentWeight = alignmentWeight,
             boundsWeight = boundsWeight,
+            predatorAvoidanceWeight = predatorAvoidanceWeight,
+
             domainRadius = domainRadius,
             domainCenter = this.transform.position,
 
@@ -238,6 +260,7 @@ public class Flock : MonoBehaviour
         boidPositionArray.Dispose();
         boidDirectionArray.Dispose();
         boidSpeedArray.Dispose();
+        predatorPositionArray.Dispose();
         resultDirections.Dispose();
         resultSpeeds.Dispose();
     }

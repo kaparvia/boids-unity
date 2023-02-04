@@ -246,20 +246,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dcc8d267bb0c8f546b27c3eb71f8e473, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  useJobs: 1
   boidPrefab: {fileID: 1009392209185208253, guid: 22481f29a4ee3864d827cc6dbca9ff5d, type: 3}
-  predatorPrefab: {fileID: 1009392209185208253, guid: c341e8e4117ded54f9641154f88bd3e8, type: 3}
-  domainRadius: 8
-  numberOfBoids: 4000
+  predatorPrefab: {fileID: 5260028365272931813, guid: 3bb54b2349283ea4291fa4006ca563f6, type: 3}
+  domainRadius: 12
+  numberOfBoids: 2000
   minSpeed: 0.1
   maxSpeed: 3
-  numberOfPredators: 0
-  minSpeedPredator: 1
-  maxSpeedPredator: 5
-  huntDistance: 5
+  numberOfPredators: 1
+  minSpeedPredator: 3
+  maxSpeedPredator: 6
+  huntDistance: 10
   huntWeight: 1
-  terminalHuntDistance: 1
-  terminalHuntWeight: 1
+  killDistance: 0.25
   cohesionDistance: 3
   avoidanceDistance: 0.5
   alignmentDistance: 3
@@ -267,10 +265,10 @@ MonoBehaviour:
   cohesionWeight: 1
   avoidanceWeight: 2
   alignmentWeight: 3
-  boundsWeight: 1
-  predatorAvoidanceWeight: 3
-  boids: []
+  boundsWeight: 8
+  predatorAvoidanceWeight: 5
   predators: []
+  boids: []
 --- !u!4 &402875796
 Transform:
   m_ObjectHideFlags: 0
@@ -431,7 +429,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 40
+  field of view: 50
   orthographic: 0
   orthographic size: 5
   m_Depth: -1

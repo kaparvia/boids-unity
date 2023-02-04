@@ -3,37 +3,37 @@ using UnityEngine;
 
 public class Predator : Boid
 {
-    protected List<Boid> preyNeighbors;
-    protected Boid closestPrey;
+    private Boid closestPrey;
 
-
-    protected override Vector3 calculateDirection()
+    public override void CalculateMove()
     {
-        updateNeighbors();
+        newDirection = calculateDirection();
+
+        // If we did not get new direction, keep the old one
+        if (newDirection == Vector3.zero)
+        {
+            newDirection = transform.forward;
+        }
+
+        speed = updateSpeed();
+    }
+
+    private Vector3 calculateDirection()
+    {
+        findNeighbors();
 
         Vector3 boundsVector = calculateBounds() * flock.boundsWeight;
         Vector3 huntVector = calculateHunt() * flock.huntWeight;
-        Vector3 terminalHuntVector = calculateTerminalHunt() * flock.terminalHuntWeight;
 
-        return boundsVector + huntVector + terminalHuntVector;
+        return boundsVector + huntVector;
     }
 
-    protected override float updateSpeed()
+    private float updateSpeed()
     {
-        if (preyNeighbors.Count == 0) return this.speed;
-
-        // Average speed over neighbors
-        float newSpeed = 0;
-
-        foreach (Boid boid in preyNeighbors)
-        {
-            newSpeed += boid.speed;
-        }
-
-        newSpeed /= preyNeighbors.Count;
+        if (!closestPrey) return this.speed;
 
         // Predators go faster
-        newSpeed *= 1.25f;
+        float newSpeed = closestPrey.speed * 1.5f;
 
         // Make sure we're within bounds
         newSpeed = Mathf.Clamp(newSpeed, flock.minSpeedPredator, flock.maxSpeedPredator);
@@ -41,43 +41,37 @@ public class Predator : Boid
         return newSpeed;
     }
 
-    private Vector3 calculateHunt()
+    private Vector3 calculateBounds()
     {
-        if (preyNeighbors.Count == 0) return Vector3.zero;
+        Vector3 boundsVector = Vector3.zero;
+        Vector3 fromCenter = flock.transform.position - this.transform.position;
 
-        Vector3 preyVector = Vector3.zero;
-
-        // Sum up positions of all neighbors to find the average center of the surrounding flock
-        foreach (Boid boid in preyNeighbors)
+        if (fromCenter.magnitude > (flock.domainRadius * 0.9f))
         {
-            preyVector += boid.transform.position;
+            boundsVector = fromCenter.normalized;
         }
 
-        // Average
-        preyVector /= preyNeighbors.Count;
-
-        // Point from current position towards flock center
-        preyVector -= this.transform.position;
-
-        // Normalize
-        return preyVector.normalized;
+        return boundsVector;
     }
 
-    private Vector3 calculateTerminalHunt()
+
+    private Vector3 calculateHunt()
     {
         if (closestPrey == null) return Vector3.zero;
 
         Vector3 huntVector = closestPrey.transform.position - this.transform.position;
 
-        //if (huntVector.magnitude < 0.5) Debug.Log("Hunt " + closestPrey.name + " : " + huntVector.magnitude);
+        if (huntVector.magnitude < flock.killDistance)
+        {
+            flock.Kill(closestPrey);
+        }
 
         // Normalize
         return huntVector.normalized;
     }
 
-    protected override void updateNeighbors()
+    private void findNeighbors()
     {
-        preyNeighbors = new List<Boid>();
         closestPrey = null;
 
         float closestDistanceSqr = 0;
@@ -86,22 +80,16 @@ public class Predator : Boid
         {
             float distanceSqr = Vector3.SqrMagnitude(boid.transform.position - this.transform.position);
 
-            if (distanceSqr < (flock.huntDistance * flock.huntDistance)) preyNeighbors.Add(boid);
-
-            if (distanceSqr < flock.terminalHuntDistance * flock.terminalHuntDistance)
+            if (distanceSqr < flock.huntDistance * flock.huntDistance)
             {
-                if (!closestPrey)
-                {
-                    closestPrey = boid;
-                    closestDistanceSqr = distanceSqr;
-                }
-                else if (distanceSqr < closestDistanceSqr)
+                if (!closestPrey || distanceSqr < closestDistanceSqr)
                 {
                     closestPrey = boid;
                     closestDistanceSqr = distanceSqr;
                 }
             }
         }
+
     }
 
 }
