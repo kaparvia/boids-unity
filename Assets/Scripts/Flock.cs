@@ -9,6 +9,8 @@ public class Flock : MonoBehaviour
     private const float COLOR_VARIATION = 0.15f;
 
     private List<Material> materials = new();
+    private UIManager uiManager;
+    public Camera camera3D;
 
     [Header("Flock Setup")]
 
@@ -26,6 +28,9 @@ public class Flock : MonoBehaviour
 
     [Range(0.1f, 20f)]
     [SerializeField] public float maxSpeed;
+
+    [Range(0f, 10f)]
+    [SerializeField] public float viewRotationSpeed;
 
     [Header("Predator Parameters")]
 
@@ -81,12 +86,15 @@ public class Flock : MonoBehaviour
     public List<Predator> predators;
     public List<Boid> boids;
 
+    private int predatorNameCounter;
 
     /*************************************************************************
      * UNITY METHODS
      ************************************************************************/
     void Start()
     {
+        uiManager = GameObject.Find("Canvas").GetComponent<UIManager>();
+
         boids = new List<Boid>();
         predators = new List<Predator>();
 
@@ -99,11 +107,16 @@ public class Flock : MonoBehaviour
             boids.Add(newBoid);
         }
 
+        predatorNameCounter = 1;
         for (int i = 0; i < numberOfPredators; i++)
         {
-            Predator newBoid = (Predator)createBoid("Predator " + i, true);
+            Predator newBoid = (Predator)createBoid("Predator " + (predatorNameCounter++), true);
             predators.Add(newBoid);
         }
+
+        // Update UI
+        uiManager.UpdateBoidCount();
+        uiManager.UpdatePredatorCount();
     }
 
     /*
@@ -119,6 +132,14 @@ public class Flock : MonoBehaviour
         }
 
         calculateBoidMoves();
+
+        if (viewRotationSpeed > 0)
+        {
+            Vector3 target = Vector3.zero;
+            camera3D.transform.LookAt(target);
+            camera3D.transform.RotateAround(target, Vector3.up, viewRotationSpeed * Time.deltaTime);
+            camera3D.transform.RotateAround(target, Vector3.right, viewRotationSpeed * Time.deltaTime);
+        }
     }
 
     /*
@@ -140,18 +161,19 @@ public class Flock : MonoBehaviour
     public void Kill(Boid boid)
     {
         boids.Remove(boid);
-        Debug.Log("Killed boid " + boid.name);
         Destroy(boid.gameObject);
+
+        uiManager.UpdateBoidCount();
     }
 
     /*************************************************************************
      * CREATE BOIDS
      ************************************************************************/
-    private Boid createBoid(string name, bool isPredator)
+    private Boid createBoid(string name, bool isPredator, bool isAtEdge = false)
     {
         Boid newBoid = Instantiate(
             isPredator ? predatorPrefab : boidPrefab,
-            UnityEngine.Random.insideUnitSphere * domainRadius,
+            isAtEdge ? UnityEngine.Random.onUnitSphere * domainRadius  : UnityEngine.Random.insideUnitSphere * domainRadius,
             Quaternion.Euler(UnityEngine.Random.Range(0, 360), UnityEngine.Random.Range(0, 360), UnityEngine.Random.Range(0, 360)),
             transform
         );
@@ -197,6 +219,23 @@ public class Flock : MonoBehaviour
     /*************************************************************************
      * UPDATE BOIDS
      ************************************************************************/
+    public void AddPredator()
+    {
+        Predator newPredator = (Predator)createBoid("Predator " + (predatorNameCounter++), true, true);
+        predators.Add(newPredator);
+        uiManager.UpdatePredatorCount();
+    }
+
+    public void RemovePredator()
+    {
+        if (predators.Count == 0) return;
+
+        Predator predator = predators[0];
+        predators.RemoveAt(0);
+
+        Destroy(predator.gameObject);
+        uiManager.UpdatePredatorCount();
+    }
 
     private void calculateBoidMoves()
     {
